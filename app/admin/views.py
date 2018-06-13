@@ -1,7 +1,7 @@
 import os
 from . import admin
 from flask import render_template, redirect, url_for, flash, session, request
-from app.admin.forms import LoginForm, TagForm, MovieForm, PreviewForm, PwdForm
+from app.admin.forms import LoginForm, TagForm, MovieForm, PreviewForm, PwdForm, AuthForm
 from app.models import Admin, Tag, Movie, Preview, User, Auth, Role, Comment, Moviecol, Oplog, Adminlog, Userlog
 from functools import wraps
 from app import db, app
@@ -171,7 +171,7 @@ def tag_edit(id=None):
         db.session.add(tag)
         db.session.commit()
         flash("编辑标签成功", "ok")
-        redirect(url_for("admin.tag_edit", id=id))
+        return redirect(url_for("admin.tag_edit", id=id))
     return render_template("admin/tag_edit.html", form=form, tag=tag)
 
 
@@ -483,16 +483,57 @@ def role_list():
     return render_template("admin/role_list.html")
 
 
-@admin.route("/auth/add/")
+@admin.route("/auth/add/", methods=["GET", "POST"])
 @admin_login_req
 def auth_add():
-    return render_template("admin/auth_add.html")
+    form = AuthForm()
+    if form.validate_on_submit():
+        data = form.data
+        auths = Auth(
+            name=data["name"],
+            url=data["url"]
+        )
+        db.session.add(auths)
+        db.session.commit()
+        flash("添加权限成功!", "ok")
+    return render_template("admin/auth_add.html", form=form)
 
 
-@admin.route("/auth/list/")
+@admin.route("/auth/list/<int:page>/", methods=["GET"])
 @admin_login_req
-def auth_list():
-    return render_template("admin/auth_list.html")
+def auth_list(page=None):
+    if page is None:
+        page = 1
+    page_data = Auth.query.order_by(
+        Auth.addtime.desc()
+    ).paginate(page=page, per_page=10)
+    return render_template("admin/auth_list.html", page_data=page_data)
+
+
+@admin.route("/auth/del/<int:id>/", methods=["GET", "POST"])
+@admin_login_req
+def auth_del(id=None):
+    auth = Auth.query.get_or_404(int(id))
+    db.session.delete(auth)
+    db.session.commit()
+    flash("删除权限成功!", "ok")
+    return redirect(url_for("admin.auth_list", page=1))
+
+
+@admin.route("/auth/edit/<int:id>/", methods=["GET", "POST"])
+@admin_login_req
+def auth_edit(id=None):
+    form = AuthForm()
+    auth = Auth.query.get_or_404(int(id))
+    if form.validate_on_submit():
+        data = form.data
+        auth.name = data["name"]
+        auth.url = data["url"]
+        db.session.add(auth)
+        db.session.commit()
+        flash("编辑权限成功", "ok")
+        return redirect(url_for("admin.auth_edit", id=id))
+    return render_template("admin/auth_edit.html", form=form, auth=auth)
 
 
 @admin.route("/admin/add/")
