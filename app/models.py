@@ -1,15 +1,6 @@
 # coding:utf8
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-import pymysql
-from werkzeug.security import generate_password_hash
-
-app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://stu:123@111.230.9.197:3306/movie"
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = True
-
-db = SQLAlchemy(app)
+from app import db
 
 
 # 会员数据模型
@@ -208,19 +199,19 @@ class Oplog(db.Model):
         return "<Oplog %r>" % self.id
 
 
-if __name__ == '__main__':
-    # db.create_all()
-    # role = Role(
-    #     name="超级管理员",
-    #     auths=""
-    # )
-    # db.session.add(role)
-    # db.session.commit()
-    admin = Admin(
-        name="admin",
-        pwd=generate_password_hash("admin"),
-        is_super=0,
-        role_id=1
-    )
-    db.session.add(admin)
-    db.session.commit()
+# if __name__ == '__main__':
+    #     # db.create_all()
+    #     # role = Role(
+    #     #     name="超级管理员",
+    #     #     auths=""
+    #     # )
+    #     # db.session.add(role)
+    #     # db.session.commit()
+    #     admin = Admin(
+    #         name="admin",
+    #         pwd=generate_password_hash("admin"),
+    #         is_super=0,
+    #         role_id=1
+    #     )
+    #     db.session.add(admin)
+    #     db.session.commit()
