@@ -1,33 +1,146 @@
 from . import home
-from flask import render_template, url_for, redirect
+from flask import render_template, url_for, redirect, flash, session, request
+from .forms import RegisterForm, LoginForm, UserdetailForm, PwdForm
+from app.models import User, Userlog
+from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
+import os
+import uuid
+from functools import wraps
+from app import db, app
+from datetime import datetime
 
 
-@home.route("/login/")
+# 修改文件名
+def change_filename(filename):
+    fileinfo = os.path.splitext(filename)
+    filename = datetime.now().strftime("%Y%m%d%H%M%S") + str(uuid.uuid4().hex) + fileinfo[-1]
+    return filename
+
+
+def user_login_req(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if "user" not in session:
+            return redirect(url_for("home.login", next=request.url))
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+@home.route("/login/", methods=["POST", "GET"])
 def login():
-    return render_template('home/login.html')
+    form = LoginForm()
+    if form.validate_on_submit():
+        data = form.data
+        user = User.query.filter_by(name=data["name"]).first()
+        if not user:
+            flash("账号密码错误,请重新输入", "err")
+            return redirect(url_for("home.login"))
+        if not user.check_pwd(data["pwd"]):
+            flash("账号密码错误,请重新输入", "err")
+            return redirect(url_for("home.login"))
+        session["user"] = user.name
+        session["user_id"] = user.id
+        userlog = Userlog(user_id=user.id, ip=request.remote_addr)
+        db.session.add(userlog)
+        db.session.commit()
+        return redirect(url_for("home.user"))
+    return render_template('home/login.html', form=form)
 
 
 @home.route("/logout/")
+@user_login_req
 def logout():
+    session.pop('user')
+    # session.pop("user_id", None)
     return redirect(url_for("home.login"))
 
 
-@home.route("/register/")
+@home.route("/register/", methods=["GET", "POST"])
 def register():
-    return render_template("home/register.html")
+    form = RegisterForm()
+    if form.validate_on_submit():
+        data = form.data
+        user = User(name=data["name"], email=data["email"], phone=data["phone"],
+            pwd=generate_password_hash(data["pwd"]), uuid=uuid.uuid4().hex)
+        db.session.add(user)
+        db.session.commit()
+        flash("恭喜您,注册成功,成为本站会员!", "ok")
+        return redirect(url_for("home.register"))
+    return render_template("home/register.html", form=form)
 
 
-@home.route("/user/")
+@home.route("/user/", methods=["GET", "POST"])
+@user_login_req
 def user():
-    return render_template("home/user.html")
+    form = UserdetailForm()
+    user = User.query.get(int(session["user_id"]))
+    form.face.validators = []
+    if request.method == "GET":
+        # 赋初值
+        form.name.data = user.name
+        form.email.data = user.email
+        form.phone.data = user.phone
+        form.info.data = user.info
+    if form.validate_on_submit():
+        data = form.data
+        if form.face.data != "":
+            file_face = secure_filename(form.face.data.filename)
+            if not os.path.exists(app.config["FC_DIR"]):
+                os.makedirs(app.config["FC_DIR"])
+                os.chmod(app.config["FC_DIR"], 'rw')
+            user.face = change_filename(file_face)
+            form.face.data.save(app.config["FC_DIR"] + user.face)
+
+        name_count = User.query.filter_by(name=data["name"]).count()
+        if data["name"] != user.name and name_count == 1:
+            flash("昵称已经存在!", "err")
+            return redirect(url_for("home.user"))
+
+        email_count = User.query.filter_by(email=data["email"]).count()
+        if data["email"] != user.email and email_count == 1:
+            flash("邮箱已经存在!", "err")
+            return redirect(url_for("home.user"))
+
+        phone_count = User.query.filter_by(phone=data["phone"]).count()
+        if data["phone"] != user.phone and phone_count == 1:
+            flash("手机已经存在!", "err")
+            return redirect(url_for("home.user"))
+
+        # 保存
+        user.name = data["name"]
+        user.email = data["email"]
+        user.phone = data["phone"]
+        user.info = data["info"]
+        db.session.add(user)
+        db.session.commit()
+        flash("修改成功!", "ok")
+        return redirect(url_for("home.user"))
+    return render_template("home/user.html", form=form, user=user)
 
 
 @home.route("/pwd/")
+@user_login_req
 def pwd():
-    return render_template("home/pwd.html")
+    form = PwdForm()
+    if form.validate_on_submit():
+        data = form.data
+        # 通过登录之后的session在数据库中查询对应的记录
+        user = User.query.filter_by(name=session["user"]).first()
+        # 引入哈希加密
+        from werkzeug.security import generate_password_hash
+        # 数据库保存通过hash加密的新密码
+        user.pwd = generate_password_hash(data["new_pwd"])
+        db.session.add(user)
+        db.session.commit()
+        flash("密码修改成功,请重新登录!!", "ok")
+        return redirect(url_for("home.logout"))
+    return render_template("home/pwd.html", form=form)
 
 
 @home.route("/comments/")
+@user_login_req
 def comments():
     return render_template("home/comments.html")
 
@@ -38,6 +151,7 @@ def loginlog():
 
 
 @home.route("/moviecol/")
+@user_login_req
 def moviecol():
     return render_template("home/moviecol.html")
 
@@ -60,5 +174,3 @@ def search():
 @home.route("/play/")
 def play():
     return render_template("home/play.html")
-
-
