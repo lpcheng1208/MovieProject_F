@@ -215,13 +215,6 @@ class PwdForm(FlaskForm):
         }
     )
 
-    def validate_old_pwd(self, field):
-        from flask import session
-        pwd = field.data
-        name = session["user"]
-        user = User.query.filter_by(name=name).first()
-        if not user.check_pwd(pwd):
-            raise ValidationError("旧密码错误！")
 
 
 class CommentForm(FlaskForm):

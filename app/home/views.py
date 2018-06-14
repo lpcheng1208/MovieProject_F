@@ -1,7 +1,7 @@
 from . import home
 from flask import render_template, url_for, redirect, flash, session, request
 from .forms import RegisterForm, LoginForm, UserdetailForm, PwdForm
-from app.models import User, Userlog
+from app.models import User, Userlog, Preview, Tag, Movie
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 import os
@@ -45,7 +45,7 @@ def login():
         userlog = Userlog(user_id=user.id, ip=request.remote_addr)
         db.session.add(userlog)
         db.session.commit()
-        return redirect(url_for("home.user"))
+        return redirect(url_for("home.index"))
     return render_template('home/login.html', form=form)
 
 
@@ -53,7 +53,7 @@ def login():
 @user_login_req
 def logout():
     session.pop('user')
-    # session.pop("user_id", None)
+    session.pop("user_id", None)
     return redirect(url_for("home.login"))
 
 
@@ -120,7 +120,7 @@ def user():
     return render_template("home/user.html", form=form, user=user)
 
 
-@home.route("/pwd/")
+@home.route("/pwd/", methods=["POST", "GET"])
 @user_login_req
 def pwd():
     form = PwdForm()
@@ -128,6 +128,9 @@ def pwd():
         data = form.data
         # 通过登录之后的session在数据库中查询对应的记录
         user = User.query.filter_by(name=session["user"]).first()
+        if not user.check_pwd(data["old_pwd"]):
+            flash("旧密码填写错误,请重新操作!!", "err")
+            return redirect(url_for("home.pwd"))
         # 引入哈希加密
         from werkzeug.security import generate_password_hash
         # 数据库保存通过hash加密的新密码
@@ -145,25 +148,96 @@ def comments():
     return render_template("home/comments.html")
 
 
-@home.route("/loginlog/")
-def loginlog():
-    return render_template("home/loginlog.html")
+@home.route("/loginlog/<int:page>/", methods=["GET"])
+def loginlog(page=None):
+    if page is None:
+        page = 1
+    page_data = Userlog.query.filter_by(
+        user_id=int(session["user_id"])
+    ).order_by(
+        Userlog.addtime.desc()
+    ).paginate(page=page, per_page=10)
+    return render_template("home/loginlog.html", page_data=page_data)
 
 
-@home.route("/moviecol/")
+@home.route("/moviecol/", methods=["GET"])
 @user_login_req
 def moviecol():
     return render_template("home/moviecol.html")
 
 
-@home.route("/")
-def index():
-    return render_template("home/index.html")
+@home.route("/<int:page>/", methods=["GET"])
+def index(page=None):
+    if page is None:
+        page = 1
+
+    tags = Tag.query.all()
+
+    page_data = Movie.query
+
+    # 标签
+    tid = request.args.get("tid", 0)
+    if int(tid) != 0:
+        page_data = page_data.filter_by(tag_id=int(tid))
+
+    # 星级
+    star = request.args.get("star", 0)
+    if int(star) != 0:
+        page_data = page_data.filter_by(star=int(star))
+
+    # 时间
+    time = request.args.get("time", 0)
+    if int(time) != 0:
+        if int(time) == 1:
+            page_data = page_data.order_by(
+                Movie.addtime.desc()
+            )
+        else:
+            page_data = page_data.order_by(
+                Movie.addtime.aesc()
+            )
+
+    # 播放数量
+    pm = request.args.get("pm", 0)
+    if int(pm) != 0:
+        if int(pm) == 1:
+            page_data = page_data.order_by(
+                Movie.playnum.desc()
+            )
+        else:
+            page_data = page_data.order_by(
+                Movie.playnum.aesc()
+            )
+
+    # 评论数量
+    cm = request.args.get("cm", 0)
+    if int(cm) != 0:
+        if int(cm) == 1:
+            page_data = page_data.order_by(
+                Movie.commentnum.desc()
+            )
+        else:
+            page_data = page_data.order_by(
+                Movie.commentnum.aesc()
+            )
+
+    page = request.args.get("page", 1)
+    page_data = page_data.paginate(page=int(page), per_page=10)
+
+    p = dict(
+        tid=tid,
+        star=star,
+        time=time,
+        pm=pm,
+        cm=cm,
+    )
+    return render_template("home/index.html", tags=tags, p=p, page_data=page_data)
 
 
 @home.route("/animation")
 def animation():
-    return render_template("home/animation.html")
+    data = Preview.query.all()
+    return render_template("home/animation.html", data=data)
 
 
 @home.route("/search/")

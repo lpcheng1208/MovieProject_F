@@ -234,6 +234,8 @@ def movie_edit(id=None):
     form.logo.validators = []
     movie = Movie.query.get_or_404(int(id))
     if request.method == "GET":
+        form.url.data = movie.url
+        form.logo.data = movie.logo
         form.info.data = movie.info
         form.tag_id.data = movie.tag_id
         form.star.data = movie.star
@@ -241,9 +243,9 @@ def movie_edit(id=None):
         data = form.data
         movie_count = Movie.query.filter_by(title=data["title"]).count()
         # 存在一步名字叫这个的电影，有可能是它自己，也有可能是同名。如果是现在的movie不等于要提交的数据中title。那么说明有两个。
-        if movie_count == 1 and movie.title == data["title"]:
-            flash("片名已经存在！", "err")
-            return redirect(url_for('admin.movie_edit', id=id))
+        # if movie_count == 1 and movie.title == data["title"]:
+        #     flash("片名已经存在！", "err")
+        #     return redirect(url_for('admin.movie_edit', id=id))
         # 创建目录
         if not os.path.exists(app.config["UP_DIR"]):
             os.makedirs(app.config["UP_DIR"])
